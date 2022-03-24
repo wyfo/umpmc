@@ -49,6 +49,10 @@ return `Dequeue::Spin` in this case, to indicate that a spin loop can be used to
 
 Because the cache ensure that there is no dangling pointers, it cannot be shrunk.
 
+Some optimization are possible, for example concerning memory ordering of atomic operations. I'm not an expert in this
+domain, and I did not think too much about it. Cache-padding is an obvious optimization for atomic fields, using for
+example `cache-padded` library, but I did not add it as it's not necessary for the algorithm.
+
 ## Why?
 
 Unbounded queue is not always a good idea, and there is a bounded algorithm more optimized. Here is the reason why I've
