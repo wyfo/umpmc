@@ -10,9 +10,10 @@ this README instead of code comments, but will maybe find the time to add them l
 Nodes are inserted atomically in a LIFO way on the queue *head*, with their *prev* field pointing to the previous *head*
 ; *next* pointer of the previous head (or queue's *tail* pointer when no previous head) is set atomically in a third
 step. The second step is to set a unique *index* to the node, which is simply the index of the previous node plus one;
-if the previous node index is not set, *prev* chain is scanned until a set index is find. The tail of the node is
-guaranteed to have its index set: it's set before the node insertion in case of the first node, and it's not possible to
-dequeue a non-tail node while its *next* field is not set (what is done after setting the index of the *next*).
+if the previous node index is not set, *prev* chain is scanned until a set index is find (with another plus one for each
+node scanned). If the tail node doesn't have an *index*, then the current queue *index* is used; then the tail node
+index is checked again, so the index is guaranteed to be the correct one (if the queue index was outdated, then the tail
+index should be updated).
 
 To ensure dequeue uniqueness, queue has an *index* which is incremented atomically when a node is about to be dequeued;
 it must match node's *index*. Because of concurrent assignments, queue's *tail* is not guaranteed to be the exact tail
@@ -22,12 +23,13 @@ matching index is found, or the dequeue is rejected. There are two cases:
 - The *tail* is the *head*, i.e. there is only one node, then the node is taken out of the queue atomically by setting
   the *head* ptr. When it fails, i.e. a second node has been inserted concurrently, it goes to the second case.
 - There is more than one node (*tail* is different from *head*), in that case, *tail* node's *next* pointer **MUST** be
-  set, or the dequeue is rejected; it guarantees that *tail*'s *index* is always set (see above) and prevent concurrent
-  set of *next*. If the dequeue is rejected, but queue's *index* has already been incremented (coming from the first
-  case), then the *index* is decremented; decrement failure means that another node is being dequeued, which means that
-  node *next* has concurrently been set (because the other node has been found by scanning from *next*), which means
-  that the dequeue can continue. Then the queue's *tail* is reassigned with compare-and-swap, but it can fail; the
-  operation is retried when the tail concurrently set is not a guaranteed tail (node's *index* equal to the queue *
+  set, or the dequeue is rejected; it guarantees that *tail*'s *index* will be set (as prev *next* is set **after**
+  *index*) and prevent concurrent set of *next*. If the dequeue is rejected, but queue's *index* has already been
+  incremented (coming from the first case), then the *index* is decremented; decrement failure means that another node
+  is being dequeued, which means that node *next* has concurrently been set (because the other node has been found by
+  scanning from *next*), which means that the dequeue can continue. Then the queue's *tail* is reassigned with
+  compare-and-swap, but it can fail; the operation is retried when the tail concurrently set is not a guaranteed tail (
+  node's *index* equal to the queue *
   index* minus one, i.e. last dequeue, or new tail with *index* equal to queue index, e.g. enqueue after dequeue of the
   last node). Finally, the node is invalidated, i.e. *index* is unset and *next* set to null.
 

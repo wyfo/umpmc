@@ -152,16 +152,8 @@ impl<T> Queue<T> {
         let node = unsafe { self.cache.get().as_mut() };
         node.value.write(value);
         let mut head = self.head.load(Ordering::Relaxed);
-        let mut index_has_been_set = false;
         loop {
             node.prev = head;
-            if head.is_null() {
-                node.index.set(self.index.load(Ordering::Relaxed));
-                index_has_been_set = true;
-            } else if index_has_been_set {
-                node.index.unset();
-                index_has_been_set = false;
-            }
             match self
                 .head
                 .compare_exchange(head, node, Ordering::SeqCst, Ordering::Relaxed)
@@ -174,13 +166,20 @@ impl<T> Queue<T> {
             let mut prev = head;
             let mut offset = 0;
             loop {
-                debug_assert!(!prev.is_null());
                 match unsafe { &*prev }.index.get() {
                     Some(i) => {
                         node.index.set(i + offset + 1);
                         break;
                     }
                     None => {
+                        if unsafe { &*prev }.prev.is_null() {
+                            let index = self.index.load(Ordering::Acquire);
+                            match unsafe { &*prev }.index.get() {
+                                Some(i) => node.index.set(i + offset + 1),
+                                None => node.index.set(index + offset + 1),
+                            }
+                            break;
+                        }
                         prev = unsafe { &*prev }.prev;
                         offset += 1;
                     }
@@ -188,6 +187,7 @@ impl<T> Queue<T> {
             }
             unsafe { &*head }.next.store(node, Ordering::Release);
         } else {
+            node.index.set(self.index.load(Ordering::Relaxed));
             self.tail.store(node, Ordering::SeqCst);
         }
     }
