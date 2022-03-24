@@ -42,7 +42,7 @@ The algorithm seems to work :) Contrary to the
 famous [Dmitry Vyukov's algorithm](https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue) (which
 was previously part of Rust standard library), it's unbounded. Actually, it could be easy to add a bound, by
 preallocating the cache nodes and preventing further allocations, but this algorithm would surely perform worse than the
-other bounded one.
+other one.
 
 One of the edge cases is the constraint of having node's *next* set to dequeue it. It can lead to situation where there
 is for example one node fully inserted in the queue, and another one currently being added. In this case, dequeueing the
