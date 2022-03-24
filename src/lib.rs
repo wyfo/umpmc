@@ -85,7 +85,7 @@ impl<T> Cache<T> {
         let mut head = self.head.load(Ordering::Relaxed);
         loop {
             unsafe { &mut *node.as_ptr() }.prev = head;
-            match self.head.compare_exchange(
+            match self.head.compare_exchange_weak(
                 head,
                 node.as_ptr(),
                 Ordering::SeqCst,
@@ -156,7 +156,7 @@ impl<T> Queue<T> {
             node.prev = head;
             match self
                 .head
-                .compare_exchange(head, node, Ordering::SeqCst, Ordering::Relaxed)
+                .compare_exchange_weak(head, node, Ordering::SeqCst, Ordering::Relaxed)
             {
                 Ok(_) => break,
                 Err(h) => head = h,
@@ -196,7 +196,7 @@ impl<T> Queue<T> {
         debug_assert!(tail.is_null() || unsafe { &*tail }.index.get().is_some());
         while let Err(t) =
         self.tail
-            .compare_exchange(tail, next, Ordering::SeqCst, Ordering::Relaxed)
+            .compare_exchange_weak(tail, next, Ordering::SeqCst, Ordering::Relaxed)
         {
             let index = self.index.load(Ordering::Relaxed);
             if node.index.get() != Some(index - 1) || (!t.is_null()
