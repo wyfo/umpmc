@@ -221,7 +221,7 @@ impl<T> Queue<T> {
             let node = unsafe { &mut *tail };
             let tail_index = match node.index.get() {
                 Some(i) => i,
-                None => return Dequeue::Empty,
+                None => return Dequeue::Spin,
             };
             let head = self.head.load(Ordering::Relaxed);
             let mut next = node.next.load(Ordering::Relaxed);
