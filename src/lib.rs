@@ -192,16 +192,23 @@ impl<T> Queue<T> {
         }
     }
 
-    fn set_tail(&self, node: &mut Node<T>, mut tail: *mut Node<T>, next: *mut Node<T>) -> T {
-        debug_assert!(tail.is_null() || unsafe { &*tail }.index.get().is_some());
+    fn set_tail(
+        &self,
+        node: &mut Node<T>,
+        mut tail: *mut Node<T>,
+        next: *mut Node<T>,
+        index: usize,
+    ) -> T {
+        debug_assert!(unsafe { &*tail }.index.get().is_some());
         while let Err(t) =
-        self.tail
-            .compare_exchange_weak(tail, next, Ordering::SeqCst, Ordering::Relaxed)
+            self.tail
+                .compare_exchange_weak(tail, next, Ordering::SeqCst, Ordering::Relaxed)
         {
-            let index = self.index.load(Ordering::Relaxed);
-            if node.index.get() != Some(index - 1) || (!t.is_null()
-                && unsafe { &*t }.prev.is_null()
-                && unsafe { &*t }.index.get() == Some(index))
+            let current_index = self.index.load(Ordering::Relaxed);
+            if index != current_index - 1
+                || (!t.is_null()
+                    && unsafe { &*t }.prev.is_null()
+                    && unsafe { &*t }.index.get() == Some(current_index))
             {
                 break;
             }
@@ -209,7 +216,7 @@ impl<T> Queue<T> {
         }
         let value = unsafe { node.value.assume_init_read() };
         node.index.unset();
-        node.next.store(std::ptr::null_mut(), Ordering::Relaxed);
+        node.next.store(std::ptr::null_mut(), Ordering::Release);
         self.cache.put(node.into());
         value
     }
@@ -230,17 +237,17 @@ impl<T> Queue<T> {
             }
             if index == tail_index
                 && match self.index.compare_exchange(
-                index,
-                index + 1,
-                Ordering::SeqCst,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => true,
-                Err(i) => {
-                    index = i;
-                    false
+                    index,
+                    index + 1,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => true,
+                    Err(i) => {
+                        index = i;
+                        false
+                    }
                 }
-            }
             {
                 if tail == head {
                     if self
@@ -253,13 +260,19 @@ impl<T> Queue<T> {
                         )
                         .is_ok()
                     {
-                        return Dequeue::Data(self.set_tail(node, tail, next));
+                        return Dequeue::Data(self.set_tail(node, tail, next, index));
                     } else {
                         next = node.next.load(Ordering::Acquire);
-                        if next.is_null() && self
-                            .index
-                            .compare_exchange(index + 1, index, Ordering::SeqCst, Ordering::Relaxed)
-                            .is_ok()
+                        if next.is_null()
+                            && self
+                                .index
+                                .compare_exchange(
+                                    index + 1,
+                                    index,
+                                    Ordering::SeqCst,
+                                    Ordering::Relaxed,
+                                )
+                                .is_ok()
                         {
                             return Dequeue::Spin;
                         } else {
@@ -268,7 +281,7 @@ impl<T> Queue<T> {
                     }
                 }
                 debug_assert!(!next.is_null());
-                return Dequeue::Data(self.set_tail(node, tail, next));
+                return Dequeue::Data(self.set_tail(node, tail, next, index));
             } else {
                 tail = next;
             }
