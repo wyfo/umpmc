@@ -47,7 +47,7 @@ other one.
 One of the edge cases is the constraint of having node's *next* set to dequeue it. It can lead to situation where there
 is for example one node fully inserted in the queue, and another one currently being added. In this case, dequeueing the
 first node will fail as long as the second insertion is not finished. However, dequeue has a special
-return `Dequeue::Spin` in this case, to indicate that a spin loop can be used to get a successful dequeue.
+return `Dequeue::Spin` in this case, to indicate that a spin loop can be used to get a successful dequeue; `dequeue_spin` method can also be used to do the spin loop directly during the dequeue process.
 
 Because the cache ensure that there is no dangling pointers, it cannot be shrunk.
 
