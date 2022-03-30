@@ -135,7 +135,7 @@ impl<T> SynchronizedQueue<T> {
     }
 }
 
-pub struct DequeueFuture<'a, T> {
+struct DequeueFuture<'a, T> {
     queue: &'a SynchronizedQueue<T>,
     spin: usize,
 }
