@@ -112,7 +112,7 @@ impl<T> Drop for Cache<T> {
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 pub enum Dequeue<T> {
     Empty,
-    Spin,
+    Inconsistent,
     Data(T),
 }
 
@@ -234,7 +234,7 @@ impl<T> Queue<T> {
             }
             let tail_index = match node.index.get() {
                 Some(i) => i,
-                None => return Dequeue::Spin,
+                None => return Dequeue::Inconsistent,
             };
             for _ in 0..spin {
                 if !node.next.load(Ordering::Relaxed).is_null()
@@ -247,7 +247,7 @@ impl<T> Queue<T> {
             let head = self.head.load(Ordering::Relaxed);
             let mut next = node.next.load(Ordering::Relaxed);
             if next.is_null() && tail != head {
-                return Dequeue::Spin;
+                return Dequeue::Inconsistent;
             }
             let next_index = index.wrapping_add(1);
             if index == tail_index
@@ -295,7 +295,7 @@ impl<T> Queue<T> {
                                 )
                                 .is_ok()
                         {
-                            return Dequeue::Spin;
+                            return Dequeue::Inconsistent;
                         } else {
                             next = node.next.load(Ordering::Acquire);
                         }

@@ -33,23 +33,33 @@ matching index is found, or the dequeue is rejected. There are two cases:
   index* minus one, i.e. last dequeue, or new tail with *index* equal to queue index, e.g. enqueue after dequeue of the
   last node). Finally, the node is invalidated, i.e. *index* is unset and *next* set to null.
 
-Allocated nodes are cached using an atomic LIFO stack. If it prevents unnecessary allocations, it mainly prevents nodes
-to be freed and having dangling *tail* and *next*.
+Allocated nodes are cached using an atomic LIFO stack. It prevents unnecessary allocations, but also mainly prevents
+nodes to be freed and having dangling *tail* or *next*.
 
 ## Analysis
 
-The algorithm seems to work :) Contrary to the
+The algorithm seems to work :)
+
+Contrary to the
 famous [Dmitry Vyukov's algorithm](https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue) (which
 was previously part of Rust standard library), it's unbounded. Actually, it could be easy to add a bound, by
 preallocating the cache nodes and preventing further allocations, but this algorithm would surely perform worse than the
 other one.
 
-One of the edge cases is the constraint of having node's *next* set to dequeue it. It can lead to situation where there
-is for example one node fully inserted in the queue, and another one currently being added. In this case, dequeueing the
-first node will fail as long as the second insertion is not finished. However, dequeue has a special
-return `Dequeue::Spin` in this case, to indicate that a spin loop can be used to get a successful dequeue; `dequeue_spin` method can also be used to do the spin loop directly during the dequeue process.
+One of the edge cases is the constraint of having node's *next* set to dequeue it. So, during the addition of the node
+next to the tail, the queue will be in a temporary "inconsistent" state. It still doesn't prevent new nodes to be
+enqueued, but on the other hand, dequeueing will fail with a special return `Dequeue::Inconsistent`. Because inconstancy
+is normally temporary, a spin loop could be used to wait the termination of the "blocking" enqueueing; `dequeue_spin`
+method can also be used to add, if necessary, the spin loop directly inside the dequeue process, which is a little
+faster.
 
-Because the cache ensure that there is no dangling pointers, it cannot be shrunk.
+However, this temporary inconsistent state makes the queue non lock-free in the official meaning, because a thread
+crashing during enqueueing would then prevent added nodes (because enqueueing still works) to be dequeued. There would
+be no deadlock/livelock still, only an infinite growing queue.
+
+Also, because the cache ensure that there is no dangling pointers, it cannot be shrunk as is. A solution could be to add
+an atomic thread counter, in order to get the current number of concurrently enqueueing/dequeueing threads; shrink could
+then be done when the counter is 0.
 
 Some optimization are possible, for example concerning memory ordering of atomic operations. I'm not an expert in this
 domain, and I did not think too much about it. Cache-padding is an obvious optimization for atomic fields, using for
@@ -63,19 +73,19 @@ designed this algorithm.
 I wanted to go back to Rust, and I was looking for a project idea. I was thinking about Go channels, wondering why there
 was no (more) standard MPMC in Rust, and had the idea to design one using two atomic indexes (yes, like the bounded
 algorithm, but I had the idea before knowing it, I swear). I did some non-convincing tries — it had been the first time
-for a while that I went deep into atomic, memory ordering, etc. — and when I was finally a little bit satisfied of my
+for a while that I went deep into atomic, memory ordering, etc. — and when I was finally a little satisfied of my 
 algorithm.
 
 Then, I looked about the state of the art, and I discovered Dmitry Vyukov's algorithm. I took my time to understand it,
 but I also understood that my tries were completely wrong, and that MPMC was a harder thing than I thought. (I'd also
-discovered that Go channel were using locks, but they were designed by Dmitry Vyukov too, so he knew what he was doing).
-So I tried to adapt my algorithm with what I'd learnt/understood, but I did not manage to find something else than the
-existing bounded MPMC ...
+discovered that Go channel were using locks, but it was also designed by Dmitry Vyukov too, so he knew what he was
+doing). So I tried to adapt my algorithm with what I'd learnt/understood, but I did not manage to find something else
+than the existing bounded MPMC ...
 
 It's frustrating to think hours about something and to realize some people smarter than you have already solved your
 problem in a cleverer way, even if studying the solution is pleasant, of course. I was frustrated and really wanted to
 find something myself, even if it would surely be less optimized, at least it would be original. So I've thought more
 hours, about bounded, but also unbounded algorithm, using array buffer, circular lists, linked lists, etc. And I finally
 found this algorithm. I did not find it on the internet (but I did not crawl all the web), so I think it's original.
-Anyway, it cames from my brain, and that's cool enough for me.
+Anyway, it came from my brain, and that's cool enough for me.
 
