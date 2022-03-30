@@ -164,19 +164,19 @@ impl<T> Queue<T> {
         }
         if !head.is_null() {
             let mut prev = head;
-            let mut offset = 0;
+            let mut offset = 1;
             loop {
                 match unsafe { &*prev }.index.get() {
                     Some(i) => {
-                        node.index.set(i + offset + 1);
+                        node.index.set(i.wrapping_add(offset));
                         break;
                     }
                     None => {
                         if unsafe { &*prev }.prev.is_null() {
                             let index = self.index.load(Ordering::Acquire);
                             match unsafe { &*prev }.index.get() {
-                                Some(i) => node.index.set(i + offset + 1),
-                                None => node.index.set(index + offset + 1),
+                                Some(i) => node.index.set(i.wrapping_add(offset)),
+                                None => node.index.set(index.wrapping_add(offset)),
                             }
                             break;
                         }
@@ -249,10 +249,11 @@ impl<T> Queue<T> {
             if next.is_null() && tail != head {
                 return Dequeue::Spin;
             }
+            let next_index = index.wrapping_add(1);
             if index == tail_index
                 && match self.index.compare_exchange(
                     index,
-                    index + 1,
+                    next_index,
                     Ordering::SeqCst,
                     Ordering::Relaxed,
                 ) {
@@ -287,7 +288,7 @@ impl<T> Queue<T> {
                             && self
                                 .index
                                 .compare_exchange(
-                                    index + 1,
+                                    next_index,
                                     index,
                                     Ordering::SeqCst,
                                     Ordering::Relaxed,
