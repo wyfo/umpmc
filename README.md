@@ -1,6 +1,6 @@
 # umpmc
 
-Unbounded Multiple Producer Multiple Consumer queue (lock free, obviously)
+Unbounded Multiple Producer Multiple Consumer queue (no lock)
 
 This algorithm is a POC. It's implemented as a doubly linked list, with a node cache. I've spent my time into writing
 this README instead of code comments, but will maybe find the time to add them later.
